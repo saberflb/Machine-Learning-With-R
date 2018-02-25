@@ -1,2 +1,152 @@
 Dataset https://archive.ics.uci.edu/ml/datasets/sms+spam+collection
 
+
+###################################### Load Data and play around
+data<- read.csv("spam.csv", stringsAsFactors = F)
+str(data)
+summary(data)
+
+data[,sapply(data, is.character)]<-sapply(data[,sapply(data, is.character)],iconv,"WINDOWS-1252","UTF-8")
+
+
+
+# Notice data$v1 is of type char and for classification we turn it into factor
+
+data$v1<-factor(data$v1)
+str(data$v1)
+
+summary(data$v1)
+table(data$v1)
+round(prop.table(table(data$v1))*100, digits=1)
+
+###################################### Data cleaning and standardizing text data
+
+# To clean text data we use text mining package "tm" 
+
+#install.packages("tm")
+library(tm)
+
+corpus<- VCorpus(VectorSource(data$v2))
+print(corpus)
+
+inspect(corpus[1:2])
+
+as.character(corpus[[1]])
+lapply(corpus[1:2], as.character)
+
+# tolower() is a function provided by R that returns lowercase version of strings. 
+
+corpus_clean<-tm_map(corpus, content_transformer(tolower)) 
+
+# stopwords() is a function provided by "tm" package which is essentially a list of words like "the", "and"...
+
+# replacePunctuation<-function(x){gsub("[[:punct:]]+", " ", x)} replaces punctuations with blanks.
+
+getTransformations()
+stopwords()
+corpus_clean<-tm_map(corpus_clean, removeNumbers)
+corpus_clean<-tm_map(corpus_clean, removeWords, stopwords())
+corpus_clean<-tm_map(corpus_clean, removePunctuation)
+
+#install.packages("SnowballC")
+library(SnowballC)
+corpus_clean<-tm_map(corpus_clean, stemDocument)
+corpus_clean<-tm_map(corpus_clean,stripWhitespace)
+
+lapply(corpus_clean[1:3], as.character)
+lapply(corpus[1:3], as.character)
+
+sms_dtm<- DocumentTermMatrix(corpus_clean)
+sms_dtm1<-DocumentTermMatrix(corpus, control=list(tolower = TRUE,removeNumbers =TRUE, stopwords=TRUE,removePunctuation=TRUE, stemming=TRUE))
+
+sms_dtm
+sms_dtm1
+
+######################################### Data Preparation(creating training and testing datasets)
+sms_dtm_train<-sms_dtm[1:4170,]
+sms_dtm_test<-sms_dtm[4172:5572,]
+
+train_labels<-data[1:4170,]$v1
+test_labels<-data[4172:5572,]$v1
+
+prop.table(table(train_labels))
+prop.table(table(test_labels))
+
+
+######################################### Visualizing text data (word clouds)
+
+#install.packages("wordcloud")
+library(wordcloud)
+wordcloud(corpus_clean, min.freq=50, random.order=FALSE)
+
+spam<-subset(data, v1=="spam")
+ham<-subset(data,v1=="ham")
+#spam[,sapply(spam, is.character)]<-sapply(spam[,sapply(spam, is.character)],iconv,"WINDOWS-1252","UTF-8")
+#ham[,sapply(spam, is.character)]<-sapply(ham[,sapply(ham, is.character)],iconv,"WINDOWS-1252","UTF-8")
+
+wordcloud(spam$v2,max.words=40,scale=c(3,0.4))
+wordcloud(ham$v2, max.words=40, scale=c(3,0.4))
+
+
+######################################### Data Preparation (creating indicator features for frequent words )
+freq_words<-findFreqTerms(sms_dtm_train,5)
+
+freq_train<-sms_dtm_train[,freq_words]
+freq_test<-sms_dtm_test[,freq_words]
+
+convert_counts<-function(x){
+	x<-ifelse(x>0, "Yes","No")
+}
+
+train<-apply(freq_train,MARGIN=2, convert_counts)
+test<-apply(freq_test,MARGIN=2, convert_counts)
+
+
+######################################## Train a Model on the data
+# The algorithm with use the presence or absence of words to estimate the probability that a given SMS message is spam
+
+#install.packages("e1071")
+library(e1071)
+
+classifier<-naiveBayes(train, train_labels)
+
+
+
+####################################### Evaluating model performance
+test_pred<-predict(classifier, test)
+
+library(gmodels)
+CrossTable(test_pred, test_labels, prop.chisq=FALSE, prop.t=FALSE, dnn=c('predicted','actual'))
+
+
+###################################### Improving model performance
+
+classifier1<-naiveBayes(train, train_labels,laplace=1)
+
+test_pred1<-predict(classifier1, test)
+CrossTable(test_pred1, test_labels, prop.chisq=FALSE, prop.t=FALSE, dnn=c('predicted','actual'))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
